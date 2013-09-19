@@ -1,0 +1,201 @@
+
+% !TEX TS-program = pdflatex
+% !TEX encoding = UTF-8 Unicode
+
+% This is a simple template for a LaTeX document using the "article" class.
+% See "book", "report", "letter" for other types of document.
+
+\documentclass[11pt]{article} % use larger type; default would be 10pt
+
+\usepackage[utf8]{inputenc} % set input encoding (not needed with XeLaTeX)
+
+%%% Examples of Article customizations
+% These packages are optional, depending whether you want the features they provide.
+% See the LaTeX Companion or other references for full information.
+
+%%% PAGE DIMENSIONS
+\usepackage{geometry} % to change the page dimensions
+\geometry{a4paper} % or letterpaper (US) or a5paper or....
+% \geometry{margin=2in} % for example, change the margins to 2 inches all round
+% \geometry{landscape} % set up the page for landscape
+%   read geometry.pdf for detailed page layout information
+
+\usepackage{graphicx} % support the \includegraphics command and options
+
+% \usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
+
+%%% PACKAGES
+\usepackage{booktabs} % for much better looking tables
+\usepackage{array} % for better arrays (eg matrices) in maths
+\usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
+\usepackage{verbatim} % adds environment for commenting out blocks of text & for better verbatim
+\usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
+% These packages are all incorporated in the memoir class to one degree or another...
+
+%%% HEADERS & FOOTERS
+\usepackage{fancyhdr} % This should be set AFTER setting up the page geometry
+\pagestyle{fancy} % options: empty , plain , fancy
+\renewcommand{\headrulewidth}{0pt} % customise the layout...
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+%%% SECTION TITLE APPEARANCE
+\usepackage{sectsty}
+\allsectionsfont{\sffamily\mdseries\upshape} % (See the fntguide.pdf for font help)
+% (This matches ConTeXt defaults)
+
+%%% ToC (table of contents) APPEARANCE
+\usepackage[nottoc,notlof,notlot]{tocbibind} % Put the bibliography in the ToC
+\usepackage[titles,subfigure]{tocloft} % Alter the style of the Table of Contents
+\renewcommand{\cftsecfont}{\rmfamily\mdseries\upshape}
+\renewcommand{\cftsecpagefont}{\rmfamily\mdseries\upshape} % No bold!
+
+\makeatletter
+   \newcommand\figcaption{\def\@captype{figure}\caption}
+   \newcommand\tabcaption{\def\@captype{table}\caption}
+\makeatother
+%%% END Article customizations
+
+%%% The "real" document content comes below...
+
+\title{CSE 509 Lecture 6}
+
+\author{Prof. Rob Johnson, Scribe:Arun Rathakrishnan}
+%\date{} % Activate to display a given date or no date (if empty),
+         % otherwise the current date is printed 
+
+\begin{document}
+\maketitle
+
+\section{Return Oriented Programming}
+\begin {itemize} \itemsep -2pt
+\item Find small gadgets in binary code. 
+\item Compose gadgets together to accomplish work. 
+\end {itemize}
+
+We can do this by placing the address of the next gadget to be called after the
+arguments to the current gadget. At the end of execution of the gadget, SP will
+point to the next gadgets address and machine will consider it as the caller
+and transfer control there by pushing the SP contents to IP. Gadgets have a small
+number of instructions one after another and end with a return, which can help
+identify them in a library's binary.
+
+\subsection{General Techniques for Arbitrary Computation}
+There are enough gadgets in libc to make a machine perform any arbitrary
+computation.\\
+\\Consider the two gadgets that can load from an arbitrary address to a register
+and store to an address from a register.
+Load into $\%eax$, addr.
+\begin{verbatim}
+     pop %eax
+     ret
+\end{verbatim}
+Here the SP points to bytes containing the address of the argument. This address
+is popped  to $\%eax$ register.\\
+\\
+Store addr, $\%eax$
+\begin{verbatim}
+     pop %edx
+     mov (%edx), %eax
+     ret
+\end{verbatim}
+Here SP contains the address where contents of $\%eax$ must be stored. This
+gadget pops SP's contents to $\%edx$. To the address contained in $\%edx$ the
+contents of $\%eax$ are moved.\\
+\\
+It is possible to string together gadgets in many libraries (to perform increment, decrement, loops,
+test equivalence, etc) to create machine code powerful enough to perform any computation.
+
+\subsection{Example Attack}
+\begin {itemize} \itemsep -2pt
+\item Use gadgets to call  mmap.
+\item Call mmap to create pages in address space that are writeable and executable.
+\item Jump to the address created using mmap.
+\end {itemize}
+
+This helps an attacker overcome the NX bit that prevents executing code on the
+stack. In Just in Time compilers, the byte code is converted and written to
+pages in memory as machine code. Then the control is transferred to the
+translated pages and execution is performed. This is an example of a scenario
+where both Write and Execute permissions are enabled for a file.
+
+\section {Address Space Layout Randomization}
+It is a defense  against all kinds of buffer flow attacks, such as
+\begin {itemize} \itemsep -2pt
+\item Code Injection - By Stack Section randomization
+\item Return to libc - Code section randomization
+\item Return oriented programming - Can not locate gadgets within libraries at random locations.
+\end {itemize}
+\subsection {Stack Randomization Technique}
+The position of the stack for a process is maintained in the Stack Pointer. SP
+is only incremented or decremented, but there is no instruction that causes SP
+to jump to a different value. Since a program just needs SP to keep track of
+the activation records, this technique moves the entire stack to different
+location and updates the stack pointer. This is done when the binary code of
+the process is loaded to memory, when the program is started and stack is setup.
+The stack's position does not change when a process is executing.\\
+
+During code injection an attacker overwrites the return address of the vulnerable
+function to specify the address of the malicious program on the stack, to which
+the control should jump. Due to randomization, the address where process's stack
+begins and hence the address of malicious program changes during every execution,
+thus preventing execution of the intended malicious code with high likelihood.\\
+
+When only stack randomization is supported, return to libc attack becomes more
+difficult but not unlikely. The argument to the function can not be passed as
+the address of the buffer in stack has been shifted due to randomization. One
+way to subvert this is to provide as input the intended attack string to a
+program that is known to use heap, several times. This fills the heap section
+(assumed to be shared among processes) and a random address is likely to point
+ to the heap. Filling the string with spaces at beginning can help the attacker
+quickly succeed and carry out the attack.
+
+\subsection {Effective Address Space Layout Randomization}
+In addition to stack section randomization, the following are done to effectively
+implement address space randomization.
+
+\begin {itemize} \itemsep -2pt
+\item Randomize location of all libraries (they must be page aligned).
+\item Randomize location of heap.
+\item Randomize mmaped location.
+\end {itemize}
+
+Randomizing the text section and location of libraries is effective in preventing
+return to libc attack and return oriented programming. In the later case, the
+attacker can not scavenge and look for gadgets to string together to execute
+arbitrary code as its position in the address space is not fixed.
+
+\subsection {Limitations of ASLR in 32 bit machines}
+\begin {itemize} \itemsep -2pt
+\item Moving around libraries that are forced to be page aligned may lead to
+fragmentation of virtual memory address space.
+\item In a 32 bit machine there is limited room for randomization (about $2^{16}$)
+different starting addresses are only possible for a given section.
+\item Locating this may lead to several crashes that can alert a system
+administrator. It has been shown that the vulnerability can be exploited in
+about two hours in a 32 bit machine.
+\item 64 bit machines have large address spaces that can support ASLR and reduce
+significantly the success of an attack compared to 32 bit machines.
+\end {itemize}
+
+\subsection {Limitations of ASLR in Windows OS}
+Linux supports position independent code ($pic$), that lets a process run a library
+code irrespective of its position in the address space. This was done to prevent
+the clash of libraries that hard-coded themselves to specific locations. This
+has been extended to support ASLR.\\
+\\
+In case of Windows, there are different options for a user to choose from based
+on config options.
+\begin {itemize} \itemsep -2pt
+\item ASLR on.
+\item ASLR Opt-in : Libraries declare in header to say if they can be loaded at
+different locations.
+\item ASLR Opt-out: Libraries declare in header to say if they opt out from ASLR.
+\end {itemize}
+
+Libraries that prevent ASLR and force the OS to load them at specific locations
+are good sources of gadgets that can be used to perform return oriented programming
+attacks. The lack of randomization enforcement has led to attacks on Adobe
+Acrobat Reader by exploitation of gadgets within libraries that must be loaded at
+a specific location in the address space.
+\end{document}
