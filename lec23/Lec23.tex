@@ -1,0 +1,257 @@
+
+% !TEX TS-program = pdflatex
+% !TEX encoding = UTF-8 Unicode
+
+% This is a simple template for a LaTeX document using the "article" class.
+% See "book", "report", "letter" for other types of document.
+
+\documentclass[11pt]{article} % use larger type; default would be 10pt
+
+\usepackage[utf8]{inputenc} % set input encoding (not needed with XeLaTeX)
+
+%%% Examples of Article customizations
+% These packages are optional, depending whether you want the features they provide.
+% See the LaTeX Companion or other references for full information.
+
+%%% PAGE DIMENSIONS
+\usepackage{geometry} % to change the page dimensions
+\geometry{a4paper} % or letterpaper (US) or a5paper or....
+% \geometry{margin=2in} % for example, change the margins to 2 inches all round
+% \geometry{landscape} % set up the page for landscape
+%   read geometry.pdf for detailed page layout information
+
+\usepackage{graphicx} % support the \includegraphics command and options
+
+% \usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
+
+%%% PACKAGES
+\usepackage{booktabs} % for much better looking tables
+\usepackage{array} % for better arrays (eg matrices) in maths
+\usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
+\usepackage{verbatim} % adds environment for commenting out blocks of text & for better verbatim
+\usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
+% These packages are all incorporated in the memoir class to one degree or another...
+
+%%% HEADERS & FOOTERS
+\usepackage{fancyhdr} % This should be set AFTER setting up the page geometry
+\pagestyle{fancy} % options: empty , plain , fancy
+\renewcommand{\headrulewidth}{0pt} % customise the layout...
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+%%% SECTION TITLE APPEARANCE
+\usepackage{sectsty}
+\allsectionsfont{\sffamily\mdseries\upshape} % (See the fntguide.pdf for font help)
+% (This matches ConTeXt defaults)
+
+%%% ToC (table of contents) APPEARANCE
+\usepackage[nottoc,notlof,notlot]{tocbibind} % Put the bibliography in the ToC
+\usepackage[titles,subfigure]{tocloft} % Alter the style of the Table of Contents
+\renewcommand{\cftsecfont}{\rmfamily\mdseries\upshape}
+\renewcommand{\cftsecpagefont}{\rmfamily\mdseries\upshape} % No bold!
+
+\makeatletter
+   \newcommand\figcaption{\def\@captype{figure}\caption}
+   \newcommand\tabcaption{\def\@captype{table}\caption}
+\makeatother
+%%% END Article customizations
+
+%%% The "real" document content comes below...
+
+\title{CSE 509 Lecture 22}
+
+\author{Prof. Rob Johnson, Scribe:Arun Rathakrishnan}
+%\date{} % Activate to display a given date or no date (if empty),
+         % otherwise the current date is printed 
+
+\begin{document}
+\maketitle
+\section {Capability Based Systems}
+Capability based systems provide a mechanism for granting acccess to resources
+through,
+\begin {itemize} \itemsep -2pt
+\item providing unforgeable references/handles.
+\item possessing handle equates to having access to resource.
+\item handles may also specify operations that a holder can perform on the resource.
+\end {itemize}
+
+Usually the operating system can be counted upon to provide references that are
+representative of some actions on a resource and ensure that the reference can not
+be forged by a user process.
+
+\section {Hardware Capability Based Systems}
+In native client systems, the untrusted code can be given more fine grained access
+to resources in the trusted region if the hardware supports fat pointers and typed/ tagged
+memory (which differentiates a pointer data from non-pointer data in the memory).
+The OS has the capability to provide boundaries of stack, heap and data section
+in pre determined register locations and provides a restrict instruction for
+selecting a smaller pointer address range within the valid range.
+\begin {verbatim}
+     store 0, A
+     store 1<<64, A+1
+     store p, A+2
+     load A, %p0
+\end {verbatim}
+\\
+This code causes assigning the valid address range to entire pointer range. But 
+the addresses $A$ to $A+2$ are tagged as non-pointers which will cause the load
+instruction into a pointer type register to fail.\\
+
+With such a system in place a trusted entity can pass pointers to addresses in
+trusted region, to an untrusted code. The untrusted code can access addresses
+which are provided as arguments, respecting the bounds placed by the fat pointers
+but not any other region in the trusted entity. The caller can specifiy if the
+pointers when deferenced can be read from or written to by extra permissions,
+passed alongside the arguments in the call.
+
+\section {Capability Based Systems used by Operating System}
+\subsection {Passing file descriptors across processes}
+A process can pass a file descriptor in its file descriptor table to another
+process, via the kernel through pipes, which causes the second process to
+incorporate the file descriptor entry in its own file descriptor table. Expect
+for the file descriptor index, both processes have the copied file descriptor
+representing identical file state. It should be noted that the permissions obtained
+in the copied file descriptor, may not be achieved through a regular open by the
+second process.
+
+\subsection {File Descriptors in Unix}
+With respect to capability, we can evaluate the capability enforced by file
+descriptors based on,
+\begin {description} \itemsep -2pt
+\item {Forgeability} \begin {itemize} \itemsep -2pt \item Can only be created by
+the operating system.
+\item Can not be accessed across address spaces or modified by a process bypassing
+the kernel.
+\end {itemize}
+\item {Holding Reference}
+\begin {itemize} \itemsep -2pt 
+\item Specify access rights of a file completely. No other information is required
+further for accessing a file, once a file descriptor is held by a process.
+\end {itemize}
+\item {Delegating Capability}
+\begin {itemize} \itemsep -2pt 
+\item Can be delegated through pipes as noted above.
+\end {itemize}
+\end {description}
+
+\subsection {Confused Deputy Problem}
+Consider an operating system which enforces unix like file access permissions
+for users and groups. In addition, an administrator can set a list of files
+that an executable file can open. In this setting, consider a compiler program
+which takes a source file as input, and writes the compiled binary to an
+output file. The user running the compiler program must have permissions to
+access, the input and output files. The compiler also writes usage information
+to a billing file, for which the permission is granted by an administrator. No
+user of the compiler is granted access to write the billing file.
+
+\begin {verbatim}
+     compile(){
+         fd1 = open(input_arg, "r");
+         fd2 = open(output_arg, "w");
+         read(fd1, ...);
+         process(fd1);
+         truncate(fd2);
+         write(fd2, ...);
+         fd = open("billing_file", "w");
+         write(fd, ...);
+    }
+\end {verbatim}
+
+For successful compilation the user must have correct permissions to input\_arg
+and output\_arg. Even though the user does not have permission to write to
+"billing\_file", during open OS accepts the extra permissions granted to compiler
+binary, to open and write to that file.\\
+
+Assume that a user passes, "billing\_file" as output\_arg. Now the OS confuses
+the extra permissions granted to compiler binary, with the permissions of the user
+and lets the file be truncated, leading to the actual billing\_file being overwritten.\\
+
+The compiler program serves as a deputy to two masters, users - who use the
+compiler, and administrators - who perform the billing. Here the deputy used the
+permissions granted by one master (access to billing file), to perform an
+unauthorised operation (user does not have access to billing file) for another
+master.
+\subsection {Establishing capabality boundaries through exec}
+exec system call flushes the address space of a process and overwrites it with
+code in the argument provided. However, it does not change the file table
+descriptor. Consider the code snippet below.
+
+\begin {verbatim}
+    fd1 = open(...);
+    fd2 = open(...);
+    exec(p2, "--input1 = fd1", "--input2 = fd2");
+\end {verbatim}
+
+The process p2 may not have access to fd1 and fd2, but on exec it can use the
+descriptors with the same permissions the original process possessed. In terms
+of capability, having access to file descriptors means that they can be used
+by p2. We can use this approach to solve the confused deputy problem.\\
+
+Here's the code for "compiler.c" which opens the input and output files, only
+if the user possesses the permission to do so. This binary does not have special
+permission to open "billing\_file".
+
+\begin {verbatim}
+    fd1 = open(input_arg, "r");
+    fd2 = open(output_arg, "w");
+    if(fd1 < 0 || fd2 < 0) exit(1);
+    exec("_compiler", "--input = fd1", "--output = fd2");
+\end {verbatim}
+
+Here's the code for "\_compiler.c" whose binary is granted write access to file
+descriptor of "billing\_file" through a special mechanism, different from open
+system call. The code is execed and can access file descriptors fd1 and fd2. It
+performs the actual compilation and writes to the billing file.
+
+\begin {verbatim}
+    fd1 = parse_args(...);
+    fd2 = parse_args(...);
+    billing_fd = get_fd(...);
+    ...
+    read(fd1);
+    ...
+    write(fd1);
+    write(billing_fd, ...);
+\end {verbatim}
+
+By separating the permission granted by different masters across different permission
+domains, we can solve this instance of confused deputy problem. The compiler may
+need to read several include files, and library code independent of user input.
+A capability based system can provide a similar mechanism, different from open
+for the compiler to read these files, thus making the compiler code, independent
+of the ambient security model enforced by the file system.
+
+\subsection {Secure file dialog}
+Based on the ability to pass file descriptors, we can allow untrusted applications
+that can not call open system call directly, to access files through a Secure
+File Dialog server. The secure file dialog server receives requests from the
+untrusted application and then shows a prompt to user asking if access to the
+file can be provided. If the user agrees, the server then opens the file (it has
+the necessary permissions) and passes the file descriptor through pipe to the
+untrusted application. Here too, by just holding file descriptors, the untrusted
+applications gains capability to access the desired file.
+\section {Eliminating Ambient Authority}
+Consider a scenario in which a process is provided capability to access only parts
+of the file system indicated by file descriptors. We can assume that only files
+in the subtree of the file descriptors (obtained through a open like mechanism) at
+the start of the process can be accessed. We can borrow ideas from open\_at system
+call.
+\begin {verbatim}
+	open_at (dir_fd, path, ...);
+\end {verbatim}
+
+path is a relative path, present in the path represented by dir\_fd, which provides
+the file descriptor of a parent directory. If open\_at can enforce that file descriptors
+returned by it are strictly in the subtree of dir\_fd path, then we can use it for
+supporting the intended capability based system. There are two general principles
+that must be followed in capability based systems.
+
+\begin {itemize} \itemsep -2pt
+\item Global access to resources must be prevented from being held.
+\item Capability leaks must be avoided.
+\end {itemize}
+
+Thus we must find a way to check paths which are absolute (global access) and use
+".." to navigate to parent directory (capability leak).
+\end{document}
+
