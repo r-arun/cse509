@@ -238,4 +238,20 @@ problem.
 Wei Xu, Sandeep Bhatkar, R. Sekar, "Taint-Enhanced Policy Enforcement:
 A Practical Approach to Defeat a Wide Range of Attacks".
 
+\section {Questions}
+\begin {enumerate} \itemsep -2pt
+\item To counter implicit flows, are all assignments inside a if block marked as
+tainted?
+\item During implict flow tracking, the taintedness between trust and what
+disappears?
+\item Should taint-variables be pushed to tain Tag table periodically? If so when?
+\item How is binary instrumentation possible? Why is it challenging?\\
+May be because, we can not use local taint variables, that we get by source
+transformation, leading to poor performance.
+\item If binary instrumentation is possible, why can not we do taint tracking for
+native libraries? Don't we have the binary code? What is the approach followed
+by memory error protection systems, when it came to binary code?
+\item What does the last transformation ($v = (*f)(E)$) mean? Can $v$ be called
+without supplying $E$ as an argument?
+\end {enumerate}
 \end{document}
